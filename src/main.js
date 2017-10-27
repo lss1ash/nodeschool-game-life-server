@@ -22,7 +22,7 @@
 //
 let game = null;
 
-const SERVER_PORT = '80';
+const SERVER_PORT = '8080';
 
 const url = require('url');
 const WebSocket = require('ws');
