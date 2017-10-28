@@ -22,21 +22,19 @@
 //
 let game = null;
 
-const SERVER_PORT = '8080';
+const SERVER_PORT = '8000';
 
 const fs = require('fs');
-const url = require('url');
-const WebSocket = require('ws');
 const io = require('socket.io')
-const http = require('http');
+const https = require('https');
 const LifeGameVirtualDom = require('../lib/LifeGameVirtualDom');
 
 const options = {
-  key: fs.readFileSync('ssl/key.pem'),
-  cert: fs.readFileSync('ssl/cert.pem')
+  key: fs.readFileSync('ssl/key.key'),
+  cert: fs.readFileSync('ssl/cert.crt')
 };
-// const server = https.createServer(options);
-const server = http.createServer().listen(SERVER_PORT);
+
+const server = https.createServer(options).listen(SERVER_PORT, () => console.log('HTTPS server started!'));
 const socket = new io(server, {
   transports: ['websocket'],
   path: '/'
@@ -54,7 +52,7 @@ function addHandlers() {
     return next(new Error('Authentication error'));
   });
 
-  socket.of('/').on('connection', function connection(sio, req) {
+  socket.of('/api').on('connection', function connection(sio, req) {
     const ip = getIp(sio);
     console.log(`Connected client: ${ip} with token ${sio.handshake.query.token}`);
 
@@ -63,11 +61,11 @@ function addHandlers() {
     sio.on('message', incoming);
   });
 
-  socket.of('/').on('error', (e) => {
+  socket.of('/api').on('error', (e) => {
     console.log(`Error happened :( \n${e}`);
   });
 
-  socket.of('/').on('close', () => {
+  socket.of('/api').on('close', () => {
     console.log(`Closed WebSocket Server`);
   });
 }
@@ -102,7 +100,7 @@ function initGame({updateInterval, pointSize, fieldX, fieldY}) {
 }
 
 function sendUpdates(data) {
-  socket.of('/').send(JSON.stringify({
+  socket.of('/api').send(JSON.stringify({
     type: 'UPDATE_STATE',
     data
   }));
