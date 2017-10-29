@@ -97,6 +97,7 @@ function incoming(message) {
 function initGame({updateInterval, pointSize, fieldX, fieldY}) {
 	game = new LifeGameVirtualDom(updateInterval, pointSize, fieldX, fieldY);
 	game.sendUpdates = sendUpdates;
+  game.userInit = userInit;
 }
 
 function sendUpdates(data) {
@@ -112,12 +113,30 @@ function sendInitialData(sio) {
   	data: {
   		state: game.state,
   		settings: game.settings,
-  		user: {
-  			token: sio.handshake.query.token,
-  			color: getRandomColor()
-  		}
+  		user: game.userInit(sio.handshake.query.token)
+      // {
+  		// 	token: sio.handshake.query.token,
+  		// 	color: game.getUserColor(sio.handshake.query.token)
+  		// }
   	}
   }));
+}
+
+function userInit(token) {
+  for (let i = 0; i < this.userList.length; i++) {
+    if (this.userList[i].token === token) {
+      return {
+        token: this.userList[i].token,
+        color: this.userList[i].color
+      };
+    }
+  }
+  const newUser = {
+    token,
+    color: getRandomColor()
+  };
+  this.userList.push(newUser);
+  return newUser;
 }
 
 function getRandomColor() {
