@@ -22,52 +22,57 @@
 //
 let game = null;
 
-const SERVER_PORT = '8080';
+const SERVER_PORT = '8000';
 
-const url = require('url');
-const WebSocket = require('ws');
+const fs = require('fs');
+const io = require('socket.io')
+const https = require('https');
 const LifeGameVirtualDom = require('../lib/LifeGameVirtualDom');
 
-const wss = new WebSocket.Server({ port: SERVER_PORT }, () => console.log('Server started!'));
+const options = {
+  key: fs.readFileSync('ssl/key.key'),
+  cert: fs.readFileSync('ssl/cert.crt')
+};
+
+const server = https.createServer(options).listen(SERVER_PORT, () => console.log('HTTPS server started!'));
+const socket = new io(server, {
+  transports: ['websocket'],
+  path: '/'
+});
 
 initGame({});
 addHandlers();
 
 function addHandlers() {
-  wss.on('connection', function connection(ws, req) {
-    ws.token = getToken(req);
-    ws.ip = getIp(req);
-
-    console.log(`Connected client: ${ws.ip} with token ${ws.token}`);
-
-    sendInitialData(ws);
-
-    ws.on('message', incoming);
+  socket.use((sio, next) => {
+    const token = sio.handshake.query.token;
+    if (!token) {
+      return next(new Error('Authentication error'));
+    }
+    return next();
   });
 
-  wss.on('error', (e) => {
+  socket.of('/api').on('connection', function connection(sio, req) {
+    const ip = getIp(sio);
+    console.log(`Connected client: ${ip} with token ${sio.handshake.query.token}`);
+
+    sendInitialData(sio);
+
+    sio.on('message', incoming);
+  });
+
+  socket.of('/api').on('error', (e) => {
     console.log(`Error happened :( \n${e}`);
   });
 
-  wss.on('close', () => {
+  socket.of('/api').on('close', () => {
     console.log(`Closed WebSocket Server`);
   });
 }
 
-function getToken(req) {
-  const location = url.parse(req.url, true);
-  if (location
-    && Object.prototype.hasOwnProperty.call(location, 'query')
-    && Object.prototype.hasOwnProperty.call(location.query, 'token')
-    && location.query.token.length > 0) {
-      return location.query.token;
-    }
-  return;
-}
-
 function getIp(req) {
-  const ipAfterProxy = req.headers['x-forwarded-for'];
-  const ipDirect = req.connection.remoteAddress;
+  const ipAfterProxy = req.handshake.headers['x-forwarded-for'];
+  const ipDirect = req.handshake.address;
   return ipAfterProxy ? ipAfterProxy : ipDirect;
 }
 
@@ -92,31 +97,42 @@ function incoming(message) {
 function initGame({updateInterval, pointSize, fieldX, fieldY}) {
 	game = new LifeGameVirtualDom(updateInterval, pointSize, fieldX, fieldY);
 	game.sendUpdates = sendUpdates;
+  game.userInit = userInit;
 }
 
 function sendUpdates(data) {
-  wss.clients.forEach(function each(client) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'UPDATE_STATE',
-        data
-      }));
-    }
-  });
+  socket.of('/api').send(JSON.stringify({
+    type: 'UPDATE_STATE',
+    data
+  }));
 }
 
-function sendInitialData(ws) {
-  ws.send(JSON.stringify({
+function sendInitialData(sio) {
+  sio.send(JSON.stringify({
   	type: 'INITIALIZE',
   	data: {
   		state: game.state,
   		settings: game.settings,
-  		user: {
-  			token: ws.token,
-  			color: getRandomColor()
-  		}
+  		user: game.userInit(sio.handshake.query.token)
   	}
   }));
+}
+
+function userInit(token) {
+  for (let i = 0; i < this.userList.length; i++) {
+    if (this.userList[i].token === token) {
+      return {
+        token: this.userList[i].token,
+        color: this.userList[i].color
+      };
+    }
+  }
+  const newUser = {
+    token,
+    color: getRandomColor()
+  };
+  this.userList.push(newUser);
+  return newUser;
 }
 
 function getRandomColor() {
