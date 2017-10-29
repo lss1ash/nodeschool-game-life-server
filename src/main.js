@@ -46,10 +46,10 @@ addHandlers();
 function addHandlers() {
   socket.use((sio, next) => {
     const token = sio.handshake.query.token;
-    if (token && token !== '') {
-      return next();
+    if (!token) {
+      return next(new Error('Authentication error'));
     }
-    return next(new Error('Authentication error'));
+    return next();
   });
 
   socket.of('/api').on('connection', function connection(sio, req) {
@@ -114,10 +114,6 @@ function sendInitialData(sio) {
   		state: game.state,
   		settings: game.settings,
   		user: game.userInit(sio.handshake.query.token)
-      // {
-  		// 	token: sio.handshake.query.token,
-  		// 	color: game.getUserColor(sio.handshake.query.token)
-  		// }
   	}
   }));
 }
